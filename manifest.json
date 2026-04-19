@@ -1,7 +1,7 @@
 {
   "id": "code-plugin",
   "name": "Code Editor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Full-featured code editor powered by Monaco (VS Code) for source files: JS, TS, Python, Go, Rust, and 20+ more languages.",
   "entry": "index.js",
   "quipuVersion": ">=0.14.0",
