@@ -76,49 +76,37 @@ const CodeViewer = ({ activeFile, onContentChange }: CodeViewerProps) => {
   return (
     <div
       ref={codeContainerRef}
-      className={cn(
-        'flex-1 flex justify-center items-start overflow-y-auto relative',
-        'py-8 px-16',
-        'max-[1400px]:justify-start max-[1400px]:pl-12',
-        'max-[1200px]:overflow-x-auto max-[1200px]:p-8',
-        'max-[1150px]:py-6 max-[1150px]:px-4',
-      )}
+      className={cn('flex-1 h-full w-full overflow-hidden relative')}
     >
-      <div className={cn(
-        'w-[816px] min-h-[400px] bg-page-bg rounded border border-page-border',
-        'shadow-[0_1px_3px_rgba(0,0,0,0.08),0_4px_12px_rgba(0,0,0,0.06)]',
-        'relative shrink-0 overflow-hidden',
-        'max-[1150px]:w-full max-[1150px]:max-w-[816px]',
-      )}>
-        <Editor
-          height="calc(100vh - 120px)"
-          language={monacoLanguage}
-          value={typeof content === 'string' ? content : ''}
-          onChange={handleChange}
-          onMount={handleEditorDidMount}
-          theme="vs-dark"
-          options={{
-            fontSize,
-            minimap: { enabled: false },
-            lineNumbers: 'on',
-            wordWrap: 'on',
-            scrollBeyondLastLine: true,
-            renderWhitespace: 'selection',
-            tabSize: 2,
-            padding: { top: 16, bottom: 16 },
-            fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
-            automaticLayout: true,
-            overviewRulerLanes: 0,
-            hideCursorInOverviewRuler: true,
-            scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
-          }}
-          loading={
-            <div className="flex items-center justify-center h-full text-text-tertiary text-sm">
-              Loading editor...
-            </div>
-          }
-        />
-      </div>
+      <Editor
+        height="100%"
+        width="100%"
+        language={monacoLanguage}
+        value={typeof content === 'string' ? content : ''}
+        onChange={handleChange}
+        onMount={handleEditorDidMount}
+        theme="vs-dark"
+        options={{
+          fontSize,
+          minimap: { enabled: false },
+          lineNumbers: 'on',
+          wordWrap: 'on',
+          scrollBeyondLastLine: true,
+          renderWhitespace: 'selection',
+          tabSize: 2,
+          padding: { top: 16, bottom: 16 },
+          fontFamily: 'var(--font-mono, "JetBrains Mono", monospace)',
+          automaticLayout: true,
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          scrollbar: { verticalScrollbarSize: 8, horizontalScrollbarSize: 8 },
+        }}
+        loading={
+          <div className="flex items-center justify-center h-full text-text-tertiary text-sm">
+            Loading editor...
+          </div>
+        }
+      />
     </div>
   );
 };
