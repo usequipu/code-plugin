@@ -1,11 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
 import Editor from '@monaco-editor/react';
-
-function cn(...inputs: (string | false | null | undefined)[]) {
-  return twMerge(clsx(inputs));
-}
 
 const EXT_TO_LANG: Record<string, string> = {
   '.js': 'javascript', '.jsx': 'javascript', '.cjs': 'javascript', '.mjs': 'javascript',
@@ -76,7 +70,7 @@ const CodeViewer = ({ activeFile, onContentChange }: CodeViewerProps) => {
   return (
     <div
       ref={codeContainerRef}
-      className={cn('flex-1 h-full w-full overflow-hidden relative')}
+      className="flex-1 h-full w-full overflow-hidden relative"
     >
       <Editor
         height="100%"
