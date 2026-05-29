@@ -1,5 +1,15 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Editor, { useMonaco, type Monaco } from '@monaco-editor/react';
+import Editor, { loader, useMonaco, type Monaco } from '@monaco-editor/react';
+import * as monacoEditor from 'monaco-editor/esm/vs/editor/editor.api';
+
+// Point @monaco-editor/loader at the bundled monaco copy so the plugin works
+// without internet (Electron production builds load from `file://`, and the
+// CDN fallback can fail or — when the script tag injection happens before
+// the React tree is ready — surface as an uncaught error that bubbles to
+// the App root and blanks the window). Monaco's default inline-worker
+// transport (data: URI) works without an explicit `MonacoEnvironment`.
+// Calling `loader.config` is idempotent; safe to run at module load.
+loader.config({ monaco: monacoEditor as unknown as Monaco });
 
 // Three Monaco themes that mirror Quipu's three theme tokens. Instead of
 // hard-coding colors, we read Quipu's CSS variables off
