@@ -1,49 +1,14 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Editor, { type Monaco } from '@monaco-editor/react';
+import Editor, { useMonaco, type Monaco } from '@monaco-editor/react';
 
-// Three Monaco themes that mirror Quipu's three theme tokens. Each one
-// pins `editor.background` to the same color as Quipu's
-// `--color-bg-surface` so the code area visually blends with the rest of
-// the shell (per the unified-background pass in the visual overhaul).
-// Syntax / token colors come from the Monaco base theme (`vs` or
-// `vs-dark`); we only override the surface + gutter so the rest of the
-// chrome stays consistent.
+// Three Monaco themes that mirror Quipu's three theme tokens. Instead of
+// hard-coding colors, we read Quipu's CSS variables off
+// `documentElement` at registration time so the Monaco surface always
+// tracks whatever the host has set for `--color-page-bg`,
+// `--color-text-primary`, etc. — including future token tweaks without a
+// plugin rebuild. Syntax / token colors come from the Monaco base
+// theme (`vs` / `vs-dark`); we only override the surface + gutter.
 type QuipuMonacoTheme = 'quipu-light' | 'quipu-dark' | 'quipu-tinted';
-
-interface MonacoThemeDef {
-  base: 'vs' | 'vs-dark';
-  bg: string;
-  fg: string;
-  gutter: string;
-  lineHighlight: string;
-}
-
-const MONACO_THEMES: Record<QuipuMonacoTheme, MonacoThemeDef> = {
-  // Match Quipu's `:root` (default light) tokens.
-  'quipu-light': {
-    base: 'vs',
-    bg: '#ffffff',
-    fg: '#1e1e1e',
-    gutter: '#9e9e9e',
-    lineHighlight: '#f5f5f5',
-  },
-  // Match Quipu's `:root.dark` tokens — the warm dark from the old chat.
-  'quipu-dark': {
-    base: 'vs-dark',
-    bg: '#2b2926',
-    fg: '#e8e8e0',
-    gutter: '#666666',
-    lineHighlight: '#2d2d2d',
-  },
-  // Match Quipu's `:root.tinted` (warm cream) tokens.
-  'quipu-tinted': {
-    base: 'vs',
-    bg: '#fdf9ec',
-    fg: '#5a4e48',
-    gutter: '#c4b3a3',
-    lineHighlight: '#f5ecd0',
-  },
-};
 
 function resolveQuipuTheme(): QuipuMonacoTheme {
   if (typeof document === 'undefined') return 'quipu-light';
@@ -53,23 +18,51 @@ function resolveQuipuTheme(): QuipuMonacoTheme {
   return 'quipu-light';
 }
 
+// Read a CSS variable off `documentElement`. Trimmed because computed
+// values often come back with surrounding whitespace.
+function readCssVar(name: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
 function registerMonacoThemes(monaco: Monaco) {
-  for (const [id, def] of Object.entries(MONACO_THEMES)) {
-    monaco.editor.defineTheme(id, {
-      base: def.base,
+  const themes: Array<{
+    id: QuipuMonacoTheme;
+    base: 'vs' | 'vs-dark';
+    selectionLight: string;
+    selectionDark: string;
+  }> = [
+    { id: 'quipu-light',  base: 'vs',      selectionLight: '#dadada', selectionDark: '#e8e8e8' },
+    { id: 'quipu-dark',   base: 'vs-dark', selectionLight: '#4a4a4a', selectionDark: '#3a3a3a' },
+    { id: 'quipu-tinted', base: 'vs',      selectionLight: '#e0d4b8', selectionDark: '#efe3c4' },
+  ];
+
+  // We register all three but only the currently-active one will use
+  // computed CSS values that reflect the live theme. The other two get
+  // the same computed values (which is fine — Monaco will replace them
+  // next time the theme changes and `registerMonacoThemes` is re-run).
+  const bg = readCssVar('--color-page-bg', '#ffffff');
+  const fg = readCssVar('--color-text-primary', '#1e1e1e');
+  const gutter = readCssVar('--color-text-tertiary', '#9e9e9e');
+  const lineHighlight = readCssVar('--color-bg-elevated', '#f5f5f5');
+
+  for (const t of themes) {
+    monaco.editor.defineTheme(t.id, {
+      base: t.base,
       inherit: true,
       rules: [],
       colors: {
-        'editor.background': def.bg,
-        'editor.foreground': def.fg,
-        'editorLineNumber.foreground': def.gutter,
-        'editorLineNumber.activeForeground': def.fg,
-        'editor.lineHighlightBackground': def.lineHighlight,
-        'editorGutter.background': def.bg,
-        'editorCursor.foreground': def.fg,
-        'editor.selectionBackground': def.base === 'vs-dark' ? '#4a4a4a' : '#dadada',
-        'editor.inactiveSelectionBackground': def.base === 'vs-dark' ? '#3a3a3a' : '#e8e8e8',
-        'editorWhitespace.foreground': def.gutter,
+        'editor.background': bg,
+        'editor.foreground': fg,
+        'editorLineNumber.foreground': gutter,
+        'editorLineNumber.activeForeground': fg,
+        'editor.lineHighlightBackground': lineHighlight,
+        'editorGutter.background': bg,
+        'editorCursor.foreground': fg,
+        'editor.selectionBackground': t.selectionLight,
+        'editor.inactiveSelectionBackground': t.selectionDark,
+        'editorWhitespace.foreground': gutter,
       },
     });
   }
@@ -127,6 +120,16 @@ const CodeViewer = ({ activeFile, onContentChange }: CodeViewerProps) => {
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => obs.disconnect();
   }, []);
+
+  // Re-register the Monaco themes whenever the Quipu theme flips so the
+  // new CSS-var values (--color-page-bg etc.) propagate. The themes
+  // are read at registration time, not at theme-application time, so we
+  // need to redefine them after every Quipu class swap.
+  const monaco = useMonaco();
+  useEffect(() => {
+    if (!monaco) return;
+    registerMonacoThemes(monaco);
+  }, [monaco, activeTheme]);
 
   useEffect(() => {
     localStorage.setItem('quipu-code-font-size', String(fontSize));
