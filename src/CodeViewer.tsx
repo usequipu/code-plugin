@@ -1,6 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor, { loader, useMonaco, type Monaco } from '@monaco-editor/react';
-import * as monacoEditor from 'monaco-editor/esm/vs/editor/editor.api';
+// Import the FULL monaco main entry (not `editor.api`) so all built-in
+// language contributions register themselves at module load. The `.api`
+// subpath only exposes the editor API — opening a `.ts` / `.py` / `.go`
+// file with the api-only import yields plaintext (no token coloring).
+import * as monacoMain from 'monaco-editor';
 
 // Point @monaco-editor/loader at the bundled monaco copy so the plugin works
 // without internet (Electron production builds load from `file://`, and the
@@ -9,7 +13,19 @@ import * as monacoEditor from 'monaco-editor/esm/vs/editor/editor.api';
 // the App root and blanks the window). Monaco's default inline-worker
 // transport (data: URI) works without an explicit `MonacoEnvironment`.
 // Calling `loader.config` is idempotent; safe to run at module load.
-loader.config({ monaco: monacoEditor as unknown as Monaco });
+loader.config({ monaco: monacoMain as unknown as Monaco });
+
+// Vite's CSS minifier collapses `#ffffff` to `#fff` in production, and
+// Monaco's defineTheme rejects 3-digit hex (it expects 6 or 8). Expand
+// any shorthand we read off CSS variables; fall back if the value is
+// not a recognizable hex literal.
+function normalizeHex(value: string, fallback: string): string {
+  const v = value.trim();
+  const short = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(v);
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+  if (/^#[0-9a-fA-F]{6}$/.test(v) || /^#[0-9a-fA-F]{8}$/.test(v)) return v;
+  return fallback;
+}
 
 // Three Monaco themes that mirror Quipu's three theme tokens. Instead of
 // hard-coding colors, we read Quipu's CSS variables off
@@ -28,12 +44,13 @@ function resolveQuipuTheme(): QuipuMonacoTheme {
   return 'quipu-light';
 }
 
-// Read a CSS variable off `documentElement`. Trimmed because computed
-// values often come back with surrounding whitespace.
+// Read a CSS variable off `documentElement` and normalize hex shorthand
+// (`#fff` → `#ffffff`) so Monaco's defineTheme doesn't reject it.
 function readCssVar(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
+  if (!v) return fallback;
+  return normalizeHex(v, fallback);
 }
 
 function registerMonacoThemes(monaco: Monaco) {
