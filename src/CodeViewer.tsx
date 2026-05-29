@@ -1,5 +1,79 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor, { type Monaco } from '@monaco-editor/react';
+
+// Three Monaco themes that mirror Quipu's three theme tokens. Each one
+// pins `editor.background` to the same color as Quipu's
+// `--color-bg-surface` so the code area visually blends with the rest of
+// the shell (per the unified-background pass in the visual overhaul).
+// Syntax / token colors come from the Monaco base theme (`vs` or
+// `vs-dark`); we only override the surface + gutter so the rest of the
+// chrome stays consistent.
+type QuipuMonacoTheme = 'quipu-light' | 'quipu-dark' | 'quipu-tinted';
+
+interface MonacoThemeDef {
+  base: 'vs' | 'vs-dark';
+  bg: string;
+  fg: string;
+  gutter: string;
+  lineHighlight: string;
+}
+
+const MONACO_THEMES: Record<QuipuMonacoTheme, MonacoThemeDef> = {
+  // Match Quipu's `:root` (default light) tokens.
+  'quipu-light': {
+    base: 'vs',
+    bg: '#ffffff',
+    fg: '#1e1e1e',
+    gutter: '#9e9e9e',
+    lineHighlight: '#f5f5f5',
+  },
+  // Match Quipu's `:root.dark` tokens — the warm dark from the old chat.
+  'quipu-dark': {
+    base: 'vs-dark',
+    bg: '#2b2926',
+    fg: '#e8e8e0',
+    gutter: '#666666',
+    lineHighlight: '#2d2d2d',
+  },
+  // Match Quipu's `:root.tinted` (warm cream) tokens.
+  'quipu-tinted': {
+    base: 'vs',
+    bg: '#fdf9ec',
+    fg: '#5a4e48',
+    gutter: '#c4b3a3',
+    lineHighlight: '#f5ecd0',
+  },
+};
+
+function resolveQuipuTheme(): QuipuMonacoTheme {
+  if (typeof document === 'undefined') return 'quipu-light';
+  const cl = document.documentElement.classList;
+  if (cl.contains('dark')) return 'quipu-dark';
+  if (cl.contains('tinted')) return 'quipu-tinted';
+  return 'quipu-light';
+}
+
+function registerMonacoThemes(monaco: Monaco) {
+  for (const [id, def] of Object.entries(MONACO_THEMES)) {
+    monaco.editor.defineTheme(id, {
+      base: def.base,
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': def.bg,
+        'editor.foreground': def.fg,
+        'editorLineNumber.foreground': def.gutter,
+        'editorLineNumber.activeForeground': def.fg,
+        'editor.lineHighlightBackground': def.lineHighlight,
+        'editorGutter.background': def.bg,
+        'editorCursor.foreground': def.fg,
+        'editor.selectionBackground': def.base === 'vs-dark' ? '#4a4a4a' : '#dadada',
+        'editor.inactiveSelectionBackground': def.base === 'vs-dark' ? '#3a3a3a' : '#e8e8e8',
+        'editorWhitespace.foreground': def.gutter,
+      },
+    });
+  }
+}
 
 const EXT_TO_LANG: Record<string, string> = {
   '.js': 'javascript', '.jsx': 'javascript', '.cjs': 'javascript', '.mjs': 'javascript',
@@ -42,9 +116,28 @@ const CodeViewer = ({ activeFile, onContentChange }: CodeViewerProps) => {
   });
   const editorRef = useRef<unknown>(null);
 
+  // Reactive: which Quipu theme is currently active? A MutationObserver
+  // watches `documentElement.class` for `.dark` / `.tinted` swaps so the
+  // Monaco editor restyles immediately when the user changes themes
+  // (the same hook fires on initial mount via `resolveQuipuTheme()`).
+  const [activeTheme, setActiveTheme] = useState<QuipuMonacoTheme>(() => resolveQuipuTheme());
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver(() => setActiveTheme(resolveQuipuTheme()));
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('quipu-code-font-size', String(fontSize));
   }, [fontSize]);
+
+  // Register the three Monaco themes once Monaco is available — runs
+  // before the editor mounts so the initial render already uses the
+  // correct background.
+  const handleBeforeMount = useCallback((monaco: Monaco) => {
+    registerMonacoThemes(monaco);
+  }, []);
 
   const handleEditorDidMount = useCallback((editor: unknown) => {
     editorRef.current = editor;
@@ -78,8 +171,9 @@ const CodeViewer = ({ activeFile, onContentChange }: CodeViewerProps) => {
         language={monacoLanguage}
         value={typeof content === 'string' ? content : ''}
         onChange={handleChange}
+        beforeMount={handleBeforeMount}
         onMount={handleEditorDidMount}
-        theme="vs-dark"
+        theme={activeTheme}
         options={{
           fontSize,
           minimap: { enabled: false },
